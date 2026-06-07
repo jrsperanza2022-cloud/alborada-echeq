@@ -260,6 +260,7 @@
     .b-acreditado { background: var(--purple-light); color: var(--purple); }
     .b-endosado   { background: #E0F2FE;             color: #075985; }
     .b-custodia   { background: #F0F9FF;             color: #0369A1; }
+    .b-presentado { background: #FEF9C3;             color: #854D0E; }
 
     .dias-ok     { display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;background:var(--green-light);color:var(--green); }
     .dias-warn   { display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;background:var(--amber-light);color:var(--amber); }
@@ -439,6 +440,7 @@
       <div class="nav-section-label">Cheques</div>
       <div class="nav-item" onclick="showSection('recibidos')" id="nav-recibidos"><i class="ti ti-arrow-down-circle"></i> Recibidos</div>
       <div class="nav-item" onclick="showSection('emitidos')" id="nav-emitidos"><i class="ti ti-arrow-up-circle"></i> Emitidos</div>
+      <div class="nav-item" onclick="showSection('presentados')" id="nav-presentados"><i class="ti ti-clock-check"></i> Presentados al cobro</div>
       <div class="nav-item" onclick="showSection('endosados')" id="nav-endosados"><i class="ti ti-transfer"></i> Endosados</div>
       <div class="nav-item" onclick="showSection('custodia')" id="nav-custodia"><i class="ti ti-safe"></i> En custodia</div>
       <div class="nav-item" onclick="showSection('cedidos')" id="nav-cedidos"><i class="ti ti-share"></i> Cedidos</div>
@@ -504,9 +506,25 @@
             <table>
               <thead><tr>
                 <th>Nro. cheque</th><th>Beneficiario</th><th>Banco</th>
-                <th>Monto</th><th>F. emisión</th><th>F. cobro</th><th>Estado</th>
+                <th>Monto</th><th>F. emisión</th><th>F. cobro</th><th>Estado</th><th></th>
               </tr></thead>
               <tbody id="tb-emitidos"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── PRESENTADOS AL COBRO ── -->
+      <section id="presentados" class="section">
+        <div class="card">
+          <div class="card-header"><span class="card-title">eCheqs presentados al cobro</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Nro. cheque</th><th>Librador</th><th>Banco</th>
+                <th>Monto</th><th>F. cobro</th><th>Estado</th><th>Acciones</th>
+              </tr></thead>
+              <tbody id="tb-presentados"></tbody>
             </table>
           </div>
         </div>
@@ -520,7 +538,7 @@
             <table>
               <thead><tr>
                 <th>Nro. cheque</th><th>Librador original</th><th>Endosado a</th>
-                <th>Monto</th><th>F. cobro</th><th>Estado</th>
+                <th>Monto</th><th>F. cobro</th><th>Estado</th><th></th>
               </tr></thead>
               <tbody id="tb-endosados"></tbody>
             </table>
@@ -536,7 +554,7 @@
             <table>
               <thead><tr>
                 <th>Nro. cheque</th><th>Librador</th><th>Banco custodia</th>
-                <th>Monto</th><th>F. cobro</th><th>Estado</th>
+                <th>Monto</th><th>F. cobro</th><th>Estado</th><th></th>
               </tr></thead>
               <tbody id="tb-custodia"></tbody>
             </table>
@@ -552,7 +570,7 @@
             <table>
               <thead><tr>
                 <th>Nro. cheque</th><th>Librador</th><th>Cedido a</th>
-                <th>Monto</th><th>F. cobro</th><th>Estado</th>
+                <th>Monto</th><th>F. cobro</th><th>Estado</th><th></th>
               </tr></thead>
               <tbody id="tb-cedidos"></tbody>
             </table>
@@ -587,6 +605,7 @@
                 <select id="f-tipo">
                   <option value="recibido">Recibido</option>
                   <option value="emitido">Emitido</option>
+                  <option value="presentado">Presentado al cobro</option>
                   <option value="endosado">Endosado</option>
                   <option value="custodia">En custodia</option>
                   <option value="cedido">Cedido</option>
@@ -749,24 +768,16 @@ function calcImp(monto) {
   return { imp, iibb, liq, neto };
 }
 
-let nextId = 10;
+let nextId = 1;
 let selectedId = null;
 
 let cheques = [
-  { id:1, tipo:'recibido', nro:'00041872', librador:'Construcciones del Sur S.A.',   beneficiario:'', banco:'Santander Argentina',              monto:485000,  emision:'2025-05-01', cobro:'2026-06-08', cuit:'30-71234567-8', obs:'Factura 0003-00012', estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:2, tipo:'recibido', nro:'00038941', librador:'Grupo Ferretero Norte',          beneficiario:'', banco:'Galicia',                          monto:720000,  emision:'2025-04-15', cobro:'2026-06-15', cuit:'20-23456789-0', obs:'',                estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:3, tipo:'recibido', nro:'00029334', librador:'Textil Pampa S.R.L.',            beneficiario:'', banco:'Macro',                            monto:193500,  emision:'2025-03-10', cobro:'2026-06-22', cuit:'30-65432198-7', obs:'',                estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:4, tipo:'recibido', nro:'00051002', librador:'Agropecuaria El Ceibo',          beneficiario:'', banco:'Banco Nación Argentina',           monto:1250000, emision:'2025-05-20', cobro:'2026-07-10', cuit:'33-98765432-9', obs:'',                estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:5, tipo:'recibido', nro:'00033210', librador:'Importadora Alpe SRL',           beneficiario:'', banco:'BBVA Argentina',                   monto:382000,  emision:'2025-02-28', cobro:'2026-05-30', cuit:'30-11223344-1', obs:'',                estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:6, tipo:'emitido',  nro:'00098231', librador:'(Nuestra empresa)',              beneficiario:'Proveedores Rápidos S.A.', banco:'Galicia',   monto:540000,  emision:'2025-05-15', cobro:'2026-06-20', cuit:'',              obs:'',                estado:'pendiente', depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:7, tipo:'endosado', nro:'00041110', librador:'Talleres García',                beneficiario:'Distribuidora Central', banco:'Supervielle',  monto:290000,  emision:'2025-04-01', cobro:'2026-07-05', cuit:'20-33445566-4', obs:'',                estado:'endosado',  depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:8, tipo:'custodia', nro:'00044578', librador:'Constructora Rioplatense',       beneficiario:'', banco:'Banco Provincia de Buenos Aires',  monto:975000,  emision:'2025-05-01', cobro:'2026-08-01', cuit:'30-55667788-2', obs:'',                estado:'custodia',  depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
-  { id:9, tipo:'cedido',   nro:'00059003', librador:'Metalúrgica Pampas',             beneficiario:'Logística Andina S.A.', banco:'Macro',        monto:160000,  emision:'2025-03-20', cobro:'2026-06-30', cuit:'20-44556677-3', obs:'',                estado:'cedido',    depositadoEn:'', acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{} },
 ];
 
 // ── ESTADO / BADGES ──
 function getEstado(c) {
   if (c.acreditado) return { cls:'b-acreditado', txt:'Acreditado' };
+  if (c.estado === 'presentado')  return { cls:'b-presentado', txt:'Presentado al cobro' };
   if (c.estado === 'depositado') return { cls:'b-depositado', txt:'Depositado' };
   if (c.estado === 'endosado')   return { cls:'b-endosado',   txt:'Endosado' };
   if (c.estado === 'custodia')   return { cls:'b-custodia',   txt:'En custodia' };
@@ -780,7 +791,7 @@ function getEstado(c) {
 }
 
 function diasBadge(c) {
-  if (['depositado','endosado','custodia','cedido','acreditado'].includes(c.estado) || c.acreditado)
+  if (['depositado','presentado','endosado','custodia','cedido','acreditado'].includes(c.estado) || c.acreditado)
     return '<span class="dias-past">—</span>';
   const d = daysFrom(c.cobro);
   if (d < 0)  return `<span class="dias-danger">${Math.abs(d)}d vencido</span>`;
@@ -794,7 +805,7 @@ function diasBadge(c) {
 function getAlertas() {
   const res = [];
   cheques.forEach(c => {
-    if (!['recibido','endosado'].includes(c.tipo)) return;
+    if (!['recibido','endosado','presentado'].includes(c.tipo)) return;
     if (c.acreditado) return;
     const d = daysFrom(c.cobro);
     if (d < 0) {
@@ -822,6 +833,12 @@ function getAlertas() {
       res.push({ tipo:'info', icon:'ti-building-bank', id:c.id,
         titulo:`eCheq #${c.nro} depositado — pendiente de acreditación`,
         sub:`${c.librador} · ${fmtARS(c.monto)}`,
+        action:'acreditar' });
+    }
+    if (c.estado === 'presentado' && !c.acreditado) {
+      res.push({ tipo:'info', icon:'ti-clock-check', id:c.id,
+        titulo:`eCheq #${c.nro} presentado al cobro — aguardando acreditación`,
+        sub:`${c.librador} · ${fmtARS(c.monto)} · F. cobro: ${fmt(c.cobro)}`,
         action:'acreditar' });
     }
   });
@@ -885,13 +902,20 @@ function renderRecibidos() {
     const ei = getEstado(c);
     let acc = '';
     if (c.acreditado) {
-      acc = `<button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>`;
+      acc = `<button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
+    } else if (c.estado === 'presentado') {
+      acc = `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})">Acreditar</button>
+             <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     } else if (c.estado === 'depositado') {
       acc = `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})">Acreditar</button>
-             <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>`;
+             <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     } else {
       acc = `<button class="btn btn-deposit btn-sm" onclick="abrirDepositar(${c.id})"><i class="ti ti-building-bank"></i> Depositar</button>
-             <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>`;
+             <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     }
     return `<tr>
       <td><code>${c.nro}</code></td>
@@ -910,7 +934,7 @@ function renderRecibidos() {
 function renderEmitidos() {
   const rows = cheques.filter(c => c.tipo === 'emitido');
   const tb = document.getElementById('tb-emitidos');
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="8"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
   tb.innerHTML = rows.map(c => {
     const ei = getEstado(c);
     return `<tr>
@@ -921,6 +945,31 @@ function renderEmitidos() {
       <td style="font-size:12px">${fmt(c.emision)}</td>
       <td style="font-size:12px">${fmt(c.cobro)}</td>
       <td><span class="badge ${ei.cls}">${ei.txt}</span></td>
+      <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPresentados() {
+  const rows = cheques.filter(c => c.tipo === 'presentado' || (c.tipo === 'recibido' && c.estado === 'presentado'));
+  const tb = document.getElementById('tb-presentados');
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
+  tb.innerHTML = rows.map(c => {
+    const acc = c.acreditado
+      ? `<button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+         <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`
+      : `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})"><i class="ti ti-receipt"></i> Acreditar</button>
+         <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+         <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
+    const ei = getEstado(c);
+    return `<tr>
+      <td><code>${c.nro}</code></td>
+      <td>${c.librador}</td>
+      <td style="font-size:12px;color:var(--text-2)">${c.banco.replace('Banco ','')}</td>
+      <td style="font-weight:600">${fmtARS(c.monto)}</td>
+      <td style="font-size:12px">${fmt(c.cobro)}</td>
+      <td><span class="badge ${ei.cls}">${ei.txt}</span></td>
+      <td><div style="display:flex;gap:5px">${acc}</div></td>
     </tr>`;
   }).join('');
 }
@@ -928,7 +977,7 @@ function renderEmitidos() {
 function renderEndosados() {
   const rows = cheques.filter(c => c.tipo === 'endosado');
   const tb = document.getElementById('tb-endosados');
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
   tb.innerHTML = rows.map(c => `<tr>
     <td><code>${c.nro}</code></td>
     <td>${c.librador}</td>
@@ -936,13 +985,14 @@ function renderEndosados() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Endosado</span></td>
+    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
   </tr>`).join('');
 }
 
 function renderCustodia() {
   const rows = cheques.filter(c => c.tipo === 'custodia');
   const tb = document.getElementById('tb-custodia');
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
   tb.innerHTML = rows.map(c => `<tr>
     <td><code>${c.nro}</code></td>
     <td>${c.librador}</td>
@@ -950,13 +1000,14 @@ function renderCustodia() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-custodia">En custodia</span></td>
+    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
   </tr>`).join('');
 }
 
 function renderCedidos() {
   const rows = cheques.filter(c => c.tipo === 'cedido');
   const tb = document.getElementById('tb-cedidos');
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="ti ti-inbox"></i>Sin registros</div></td></tr>`; return; }
   tb.innerHTML = rows.map(c => `<tr>
     <td><code>${c.nro}</code></td>
     <td>${c.librador}</td>
@@ -964,6 +1015,7 @@ function renderCedidos() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Cedido</span></td>
+    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
   </tr>`).join('');
 }
 
@@ -1000,6 +1052,7 @@ function renderAll() {
   renderAlertas();
   renderRecibidos();
   renderEmitidos();
+  renderPresentados();
   renderEndosados();
   renderCustodia();
   renderCedidos();
@@ -1008,6 +1061,7 @@ function renderAll() {
 
 // ── NAVEGACIÓN ──
 const TITLES = { alertas:'Alertas', recibidos:'eCheqs recibidos', emitidos:'eCheqs emitidos',
+  presentados:'Presentados al cobro',
   endosados:'eCheqs endosados', custodia:'En custodia', cedidos:'eCheqs cedidos',
   flujo:'Flujo de caja', nuevo:'Nuevo eCheq' };
 
@@ -1159,9 +1213,19 @@ function agregarCheque() {
   });
   ['f-nro','f-librador','f-beneficiario','f-monto','f-emision','f-cobro','f-cuit','f-obs']
     .forEach(id => document.getElementById(id).value = '');
-  const destMap = { recibido:'recibidos', emitido:'emitidos', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
+  const destMap = { recibido:'recibidos', emitido:'emitidos', presentado:'presentados', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
   showSection(destMap[tipo] || 'recibidos');
   toast('eCheq registrado correctamente');
+}
+
+// ── ELIMINAR ──
+function eliminarCheque(id) {
+  const c = cheques.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`¿Eliminár el eCheq #${c.nro} de ${c.librador}?\n\nEsta acción no se puede deshacer.`)) return;
+  cheques = cheques.filter(x => x.id !== id);
+  toast('eCheq eliminado');
+  renderAll();
 }
 
 // ── TOAST ──
