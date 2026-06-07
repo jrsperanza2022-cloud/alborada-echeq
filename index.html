@@ -424,6 +424,55 @@
     }
 
     code { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; background: var(--surface2); padding: 2px 6px; border-radius: 4px; }
+
+    /* Autocomplete clientes */
+    .ac-wrap { position: relative; }
+    .ac-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%; left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-md);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-md);
+      z-index: 50;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .ac-dropdown.open { display: block; }
+    .ac-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px;
+    }
+    .ac-item:hover { background: var(--surface2); }
+    .ac-item-name { font-weight: 500; color: var(--text); }
+    .ac-item-cuit { font-size: 11px; color: var(--text-3); }
+    .ac-item-del {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-3); font-size: 14px; padding: 2px 4px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .ac-item-del:hover { color: var(--red); background: var(--red-light); }
+    .ac-add-new {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--orange);
+      font-weight: 600;
+      cursor: pointer;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ac-add-new:hover { background: var(--orange-light); }
+    .clientes-btn {
+      font-size: 11px; color: var(--orange); font-weight: 600;
+      cursor: pointer; margin-top: 4px; display: inline-flex;
+      align-items: center; gap: 4px; background: none; border: none; padding: 0;
+    }
+    .clientes-btn:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -459,6 +508,7 @@
       <div class="nav-item" onclick="showSection('flujo')" id="nav-flujo"><i class="ti ti-chart-bar"></i> Flujo de caja</div>
       <div class="nav-section-label">Acciones</div>
       <div class="nav-item" onclick="showSection('nuevo')" id="nav-nuevo"><i class="ti ti-circle-plus"></i> Nuevo eCheq</div>
+      <div class="nav-item" onclick="showSection('clientes')" id="nav-clientes"><i class="ti ti-users"></i> Clientes</div>
     </nav>
   </aside>
 
@@ -638,6 +688,7 @@
                   <option value="recibido">Recibido</option>
                   <option value="emitido">Emitido</option>
                   <option value="presentado">Presentado al cobro</option>
+                  <option value="cobrado">Cobrado / Pagado</option>
                   <option value="endosado">Endosado</option>
                   <option value="custodia">En custodia</option>
                   <option value="cedido">Cedido</option>
@@ -649,7 +700,14 @@
               </div>
               <div class="form-field">
                 <label>Librador / Emisor</label>
-                <input id="f-librador" placeholder="Razón social o nombre" />
+                <div class="ac-wrap">
+                  <input id="f-librador" placeholder="Escribí o buscá un cliente..." autocomplete="off"
+                    oninput="acFiltrar()" onfocus="acFiltrar()" onblur="setTimeout(acCerrar,180)" />
+                  <div class="ac-dropdown" id="ac-dropdown"></div>
+                </div>
+                <button class="clientes-btn" type="button" onclick="showSection('clientes')">
+                  <i class="ti ti-users"></i> Gestionar clientes guardados
+                </button>
               </div>
               <div class="form-field">
                 <label>Beneficiario / A quién se cedió</label>
@@ -702,11 +760,71 @@
         </div>
       </section>
 
+      <!-- ── CLIENTES ── -->
+      <section id="clientes" class="section">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="ti ti-users" style="color:var(--orange)"></i> Clientes / Libradores guardados</span>
+            <button class="btn btn-primary btn-sm" onclick="abrirNuevoCliente()"><i class="ti ti-plus"></i> Nuevo cliente</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nombre / Razón social</th><th>CUIT</th><th>Banco habitual</th><th>Obs.</th><th></th></tr></thead>
+              <tbody id="tb-clientes"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 </div>
 
-<!-- MODAL DEPOSITAR -->
+<!-- MODAL NUEVO CLIENTE -->
+<div class="modal-backdrop" id="modal-cliente">
+  <div class="modal">
+    <div class="modal-title" id="modal-cliente-titulo"><i class="ti ti-user-plus" style="color:var(--orange)"></i> Nuevo cliente</div>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label>Nombre / Razón social *</label>
+        <input id="cl-nombre" placeholder="Ej: Construcciones del Sur S.A." />
+      </div>
+      <div class="form-field">
+        <label>CUIT</label>
+        <input id="cl-cuit" placeholder="20-12345678-9" />
+      </div>
+      <div class="form-field">
+        <label>Banco habitual</label>
+        <select id="cl-banco">
+          <option value="">— Sin especificar —</option>
+          <option>Banco Nación Argentina</option>
+          <option>Banco Provincia de Buenos Aires</option>
+          <option>Santander Argentina</option>
+          <option>BBVA Argentina</option>
+          <option>Galicia</option>
+          <option>ICBC</option>
+          <option>Macro</option>
+          <option>Supervielle</option>
+          <option>Patagonia</option>
+          <option>Ciudad de Buenos Aires</option>
+          <option>Brubank</option>
+          <option>Naranja X</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div class="form-field full">
+        <label>Observaciones</label>
+        <input id="cl-obs" placeholder="Notas opcionales" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-cliente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCliente()"><i class="ti ti-device-floppy"></i> Guardar cliente</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="modal-backdrop" id="modal-depositar">
   <div class="modal">
     <div class="modal-title"><i class="ti ti-building-bank" style="color:var(--blue)"></i> Registrar depósito</div>
@@ -1139,13 +1257,14 @@ function renderAll() {
   renderCustodia();
   renderCedidos();
   renderFlujo();
+  renderClientes();
 }
 
 // ── NAVEGACIÓN ──
 const TITLES = { alertas:'Alertas', recibidos:'eCheqs recibidos', emitidos:'eCheqs emitidos',
   presentados:'Presentados al cobro', cobrados:'Cobrados / Ganancias',
   endosados:'eCheqs endosados', custodia:'En custodia', cedidos:'eCheqs cedidos',
-  flujo:'Flujo de caja', nuevo:'Nuevo eCheq' };
+  flujo:'Flujo de caja', nuevo:'Nuevo eCheq', clientes:'Clientes / Libradores' };
 
 function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -1287,17 +1406,157 @@ function agregarCheque() {
     toast('Completá los campos obligatorios: número, librador, monto y fecha de cobro', true);
     return;
   }
+
+  // Guardar librador como cliente si no existe aún
+  if (librador && !clientes.some(c => c.nombre.toLowerCase() === librador.toLowerCase())) {
+    clientes.push({ id: Date.now(), nombre: librador, cuit: cuit, banco: banco, obs: '' });
+    renderClientes();
+  }
+
+  const esCobrado = tipo === 'cobrado';
+  const imp = esCobrado ? calcImp(monto) : null;
+
   cheques.push({
-    id: nextId++, tipo, nro, librador, beneficiario, banco, monto,
+    id: nextId++, tipo: esCobrado ? 'recibido' : tipo,
+    nro, librador, beneficiario, banco, monto,
     emision: emision || todayISO(), cobro, cuit, obs,
-    estado:'pendiente', depositadoEn:'',
-    acreditado:false, acreditadoImporte:0, acreditadoFecha:'', impuestos:{}
+    estado: esCobrado ? 'acreditado' : 'pendiente',
+    depositadoEn:'',
+    acreditado: esCobrado,
+    acreditadoImporte: esCobrado ? imp.neto : 0,
+    acreditadoFecha:   esCobrado ? (cobro || todayISO()) : '',
+    impuestos: esCobrado ? imp : {}
   });
   ['f-nro','f-librador','f-beneficiario','f-monto','f-emision','f-cobro','f-cuit','f-obs']
     .forEach(id => document.getElementById(id).value = '');
-  const destMap = { recibido:'recibidos', emitido:'emitidos', presentado:'presentados', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
+  const destMap = { recibido:'recibidos', emitido:'emitidos', presentado:'presentados',
+                    cobrado:'cobrados', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
   showSection(destMap[tipo] || 'recibidos');
-  toast('eCheq registrado correctamente');
+  toast(esCobrado ? '✓ eCheq registrado como cobrado' : 'eCheq registrado correctamente');
+}
+
+// ── CLIENTES ──
+let clientes = [];
+let editClienteId = null;
+
+function guardarCliente() {
+  const nombre = document.getElementById('cl-nombre').value.trim();
+  if (!nombre) { toast('El nombre es obligatorio', true); return; }
+  const cuit  = document.getElementById('cl-cuit').value.trim();
+  const banco = document.getElementById('cl-banco').value;
+  const obs   = document.getElementById('cl-obs').value.trim();
+  if (editClienteId !== null) {
+    const c = clientes.find(x => x.id === editClienteId);
+    if (c) { c.nombre = nombre; c.cuit = cuit; c.banco = banco; c.obs = obs; }
+    editClienteId = null;
+  } else {
+    clientes.push({ id: Date.now(), nombre, cuit, banco, obs });
+  }
+  closeModal('modal-cliente');
+  renderClientes();
+  toast('Cliente guardado');
+}
+
+function abrirNuevoCliente() {
+  editClienteId = null;
+  document.getElementById('modal-cliente-titulo').innerHTML = '<i class="ti ti-user-plus" style="color:var(--orange)"></i> Nuevo cliente';
+  ['cl-nombre','cl-cuit','cl-obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cl-banco').value = '';
+  openModal('modal-cliente');
+}
+
+function editarCliente(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  editClienteId = id;
+  document.getElementById('modal-cliente-titulo').innerHTML = '<i class="ti ti-edit" style="color:var(--orange)"></i> Editar cliente';
+  document.getElementById('cl-nombre').value = c.nombre;
+  document.getElementById('cl-cuit').value   = c.cuit;
+  document.getElementById('cl-banco').value  = c.banco;
+  document.getElementById('cl-obs').value    = c.obs;
+  openModal('modal-cliente');
+}
+
+function eliminarCliente(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  if (!confirm(`¿Eliminar el cliente "${c.nombre}"?`)) return;
+  clientes = clientes.filter(x => x.id !== id);
+  renderClientes();
+  toast('Cliente eliminado');
+}
+
+function renderClientes() {
+  const tb = document.getElementById('tb-clientes');
+  if (!clientes.length) {
+    tb.innerHTML = `<tr><td colspan="5"><div class="empty-state"><i class="ti ti-users"></i>Sin clientes guardados.<br>Agregá uno con el botón de arriba.</div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = clientes.map(c => `<tr>
+    <td style="font-weight:600">${c.nombre}</td>
+    <td><code>${c.cuit || '—'}</code></td>
+    <td style="font-size:12px;color:var(--text-2)">${c.banco || '—'}</td>
+    <td style="font-size:12px;color:var(--text-2)">${c.obs || '—'}</td>
+    <td>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-outline btn-sm" onclick="editarCliente(${c.id})"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCliente(${c.id})"><i class="ti ti-trash"></i></button>
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+// ── AUTOCOMPLETE ──
+function acFiltrar() {
+  const q = document.getElementById('f-librador').value.toLowerCase();
+  const dd = document.getElementById('ac-dropdown');
+  const matches = q.length === 0
+    ? clientes
+    : clientes.filter(c => c.nombre.toLowerCase().includes(q) || (c.cuit && c.cuit.includes(q)));
+
+  if (!clientes.length && q.length === 0) { dd.classList.remove('open'); return; }
+
+  let html = matches.map(c => `
+    <div class="ac-item" onmousedown="acSeleccionar(${c.id})">
+      <div>
+        <div class="ac-item-name">${c.nombre}</div>
+        ${c.cuit ? `<div class="ac-item-cuit">CUIT: ${c.cuit}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  if (q.length > 0) {
+    const existe = clientes.some(c => c.nombre.toLowerCase() === q);
+    if (!existe) {
+      html += `<div class="ac-add-new" onmousedown="acGuardarNuevo()">
+        <i class="ti ti-plus"></i> Guardar "${document.getElementById('f-librador').value}" como nuevo cliente
+      </div>`;
+    }
+  }
+
+  dd.innerHTML = html || '<div style="padding:8px 12px;font-size:13px;color:var(--text-3)">Sin resultados</div>';
+  dd.classList.add('open');
+}
+
+function acSeleccionar(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  document.getElementById('f-librador').value = c.nombre;
+  if (c.cuit)  document.getElementById('f-cuit').value  = c.cuit;
+  if (c.banco) {
+    const sel = document.getElementById('f-banco');
+    for (let o of sel.options) { if (o.value === c.banco) { sel.value = c.banco; break; } }
+  }
+  document.getElementById('ac-dropdown').classList.remove('open');
+}
+
+function acGuardarNuevo() {
+  const nombre = document.getElementById('f-librador').value.trim();
+  if (!nombre) return;
+  clientes.push({ id: Date.now(), nombre, cuit: document.getElementById('f-cuit').value.trim(), banco: '', obs: '' });
+  document.getElementById('ac-dropdown').classList.remove('open');
+  toast(`Cliente "${nombre}" guardado`);
+  renderClientes();
+}
+
+function acCerrar() {
+  document.getElementById('ac-dropdown').classList.remove('open');
 }
 
 // ── ELIMINAR ──
