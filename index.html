@@ -891,8 +891,16 @@
 // ── DATA ──
 const HOY = new Date(); HOY.setHours(0,0,0,0);
 
+function parseLocalDate(d) {
+  // "YYYY-MM-DD" pasado a new Date() se interpreta como UTC, lo que en zonas
+  // horarias negativas (ej. Argentina, UTC-3) corre la fecha un día hacia
+  // atrás. Parseamos los componentes a mano para construir la fecha en
+  // horario LOCAL y evitar ese desfasaje.
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day);
+}
 function daysFrom(d) {
-  const t = new Date(d); t.setHours(0,0,0,0);
+  const t = parseLocalDate(d);
   return Math.round((t - HOY) / 86400000);
 }
 function fmt(d) {
@@ -923,6 +931,50 @@ let selectedId = null;
 
 let cheques = [
 ];
+
+// ── PERSISTENCIA ──
+// Antes los datos vivían solo en estas variables de JS: al recargar la
+// página, reabrir el archivo, o re-renderizar el artifact, se perdían
+// por completo. Esto guarda y recupera el estado real:
+//  1) window.storage (persistencia entre sesiones cuando se usa como
+//     artifact de Claude), y
+//  2) localStorage como respaldo, para cuando el archivo se abre suelto
+//     en un navegador normal.
+const STORAGE_KEY = 'echeqs:data';
+
+async function cargarDatosGuardados() {
+  try {
+    if (window.storage && typeof window.storage.get === 'function') {
+      const res = await window.storage.get(STORAGE_KEY, false);
+      if (res && res.value) return JSON.parse(res.value);
+    }
+  } catch (e) { /* todavía no hay datos guardados en window.storage */ }
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* localStorage no disponible o vacío */ }
+
+  return null;
+}
+
+async function guardarDatos() {
+  const payload = JSON.stringify({ cheques, clientes, nextId });
+  let guardadoOk = false;
+  try {
+    if (window.storage && typeof window.storage.set === 'function') {
+      await window.storage.set(STORAGE_KEY, payload, false);
+      guardadoOk = true;
+    }
+  } catch (e) { /* sigue con el respaldo de localStorage */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, payload);
+    guardadoOk = true;
+  } catch (e) { /* localStorage no disponible (ej. modo privado) */ }
+  if (!guardadoOk) {
+    toast('⚠ No se pudo guardar — los datos podrían perderse al recargar', true);
+  }
+}
 
 // ── ESTADO / BADGES ──
 function getEstado(c) {
@@ -957,28 +1009,38 @@ function getAlertas() {
   cheques.forEach(c => {
     if (!['recibido','endosado','presentado'].includes(c.tipo)) return;
     if (c.acreditado) return;
-    const d = daysFrom(c.cobro);
-    if (d < 0) {
-      res.push({ tipo:'danger', icon:'ti-alert-triangle', id:c.id,
-        titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
-        sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-        action:'depositar' });
-    } else if (d === 0) {
-      res.push({ tipo:'danger', icon:'ti-alarm', id:c.id,
-        titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
-        sub:`${c.librador} · ${fmtARS(c.monto)}`,
-        action:'depositar' });
-    } else if (d <= 7) {
-      res.push({ tipo:'warning', icon:'ti-bell-ringing', id:c.id,
-        titulo:`eCheq #${c.nro} vence en ${d} días`,
-        sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-        action:'depositar' });
-    } else if (d <= 30) {
-      res.push({ tipo:'warning', icon:'ti-clock', id:c.id,
-        titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
-        sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-        action:null });
+
+    // Si ya está depositado o presentado al cobro, no tiene sentido seguir
+    // mostrando el aviso de "depositalo antes de que venza": esa etapa ya
+    // se cumplió. Antes se mostraban las dos alertas (depositar + acreditar)
+    // al mismo tiempo para el mismo cheque.
+    const enTransito = c.estado === 'depositado' || c.estado === 'presentado';
+
+    if (!enTransito) {
+      const d = daysFrom(c.cobro);
+      if (d < 0) {
+        res.push({ tipo:'danger', icon:'ti-alert-triangle', id:c.id,
+          titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
+          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+          action:'depositar' });
+      } else if (d === 0) {
+        res.push({ tipo:'danger', icon:'ti-alarm', id:c.id,
+          titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
+          sub:`${c.librador} · ${fmtARS(c.monto)}`,
+          action:'depositar' });
+      } else if (d <= 7) {
+        res.push({ tipo:'warning', icon:'ti-bell-ringing', id:c.id,
+          titulo:`eCheq #${c.nro} vence en ${d} días`,
+          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+          action:'depositar' });
+      } else if (d <= 30) {
+        res.push({ tipo:'warning', icon:'ti-clock', id:c.id,
+          titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
+          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+          action:null });
+      }
     }
+
     if (c.estado === 'depositado' && !c.acreditado) {
       res.push({ tipo:'info', icon:'ti-building-bank', id:c.id,
         titulo:`eCheq #${c.nro} depositado — pendiente de acreditación`,
@@ -1298,6 +1360,7 @@ function confirmarDepositar() {
   const c = cheques.find(x => x.id === selectedId);
   if (c) { c.estado = 'depositado'; c.depositadoEn = document.getElementById('dep-fecha').value; }
   closeModal('modal-depositar');
+  guardarDatos();
   toast('eCheq marcado como depositado');
   renderAll();
 }
@@ -1343,6 +1406,7 @@ function confirmarAcreditar() {
     c.estado = 'acreditado';
   }
   closeModal('modal-acreditar');
+  guardarDatos();
   toast('✓ Cheque cobrado y acreditado correctamente');
   showSection('cobrados');
 }
@@ -1416,11 +1480,22 @@ function agregarCheque() {
   const esCobrado = tipo === 'cobrado';
   const imp = esCobrado ? calcImp(monto) : null;
 
+  // El estado inicial debe reflejar el tipo elegido: si se registra
+  // directamente como presentado/endosado/custodia/cedido, el estado
+  // tiene que coincidir (antes quedaba siempre en 'pendiente' y la
+  // insignia mostrada no correspondía con la sección donde aparecía).
+  let estadoInicial = 'pendiente';
+  if (esCobrado) {
+    estadoInicial = 'acreditado';
+  } else if (['presentado','endosado','custodia','cedido'].includes(tipo)) {
+    estadoInicial = tipo;
+  }
+
   cheques.push({
     id: nextId++, tipo: esCobrado ? 'recibido' : tipo,
     nro, librador, beneficiario, banco, monto,
     emision: emision || todayISO(), cobro, cuit, obs,
-    estado: esCobrado ? 'acreditado' : 'pendiente',
+    estado: estadoInicial,
     depositadoEn:'',
     acreditado: esCobrado,
     acreditadoImporte: esCobrado ? imp.neto : 0,
@@ -1429,6 +1504,7 @@ function agregarCheque() {
   });
   ['f-nro','f-librador','f-beneficiario','f-monto','f-emision','f-cobro','f-cuit','f-obs']
     .forEach(id => document.getElementById(id).value = '');
+  guardarDatos();
   const destMap = { recibido:'recibidos', emitido:'emitidos', presentado:'presentados',
                     cobrado:'cobrados', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
   showSection(destMap[tipo] || 'recibidos');
@@ -1454,6 +1530,7 @@ function guardarCliente() {
   }
   closeModal('modal-cliente');
   renderClientes();
+  guardarDatos();
   toast('Cliente guardado');
 }
 
@@ -1481,6 +1558,7 @@ function eliminarCliente(id) {
   if (!confirm(`¿Eliminar el cliente "${c.nombre}"?`)) return;
   clientes = clientes.filter(x => x.id !== id);
   renderClientes();
+  guardarDatos();
   toast('Cliente eliminado');
 }
 
@@ -1551,6 +1629,7 @@ function acGuardarNuevo() {
   if (!nombre) return;
   clientes.push({ id: Date.now(), nombre, cuit: document.getElementById('f-cuit').value.trim(), banco: '', obs: '' });
   document.getElementById('ac-dropdown').classList.remove('open');
+  guardarDatos();
   toast(`Cliente "${nombre}" guardado`);
   renderClientes();
 }
@@ -1563,8 +1642,9 @@ function acCerrar() {
 function eliminarCheque(id) {
   const c = cheques.find(x => x.id === id);
   if (!c) return;
-  if (!confirm(`¿Eliminár el eCheq #${c.nro} de ${c.librador}?\n\nEsta acción no se puede deshacer.`)) return;
+  if (!confirm(`¿Eliminar el eCheq #${c.nro} de ${c.librador}?\n\nEsta acción no se puede deshacer.`)) return;
   cheques = cheques.filter(x => x.id !== id);
+  guardarDatos();
   toast('eCheq eliminado');
   renderAll();
 }
@@ -1580,7 +1660,15 @@ function toast(msg, error = false) {
 }
 
 // ── INIT ──
-renderAll();
+(async function iniciarApp() {
+  const datos = await cargarDatosGuardados();
+  if (datos) {
+    cheques  = datos.cheques  || [];
+    clientes = datos.clientes || [];
+    nextId   = datos.nextId   || (cheques.reduce((m, c) => Math.max(m, c.id), 0) + 1);
+  }
+  renderAll();
+})();
 </script>
 </body>
 </html>
