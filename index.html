@@ -518,7 +518,7 @@
       <div class="nav-item" onclick="showSection('cobrados')" id="nav-cobrados"><i class="ti ti-coin"></i> Cobrados / Ganancias</div>
       <div class="nav-item" onclick="showSection('flujo')" id="nav-flujo"><i class="ti ti-chart-bar"></i> Flujo de caja</div>
       <div class="nav-section-label">Acciones</div>
-      <div class="nav-item" onclick="showSection('nuevo')" id="nav-nuevo"><i class="ti ti-circle-plus"></i> Nuevo eCheq</div>
+      <div class="nav-item" onclick="abrirFormularioNuevo()" id="nav-nuevo"><i class="ti ti-circle-plus"></i> Nuevo eCheq</div>
       <div class="nav-item" onclick="showSection('clientes')" id="nav-clientes"><i class="ti ti-users"></i> Clientes</div>
     </nav>
   </aside>
@@ -531,7 +531,7 @@
         <span class="topbar-title" id="topbar-title">Alertas</span>
       </div>
       <div class="topbar-right">
-        <button class="btn btn-primary btn-sm" onclick="showSection('nuevo')"><i class="ti ti-plus"></i> Nuevo eCheq</button>
+        <button class="btn btn-primary btn-sm" onclick="abrirFormularioNuevo()"><i class="ti ti-plus"></i> Nuevo eCheq</button>
       </div>
     </header>
 
@@ -690,8 +690,9 @@
       <!-- ── NUEVO ECHEQ ── -->
       <section id="nuevo" class="section">
         <div class="card">
-          <div class="card-header"><span class="card-title">Registrar nuevo eCheq</span></div>
+          <div class="card-header"><span class="card-title" id="form-titulo">Registrar nuevo eCheq</span></div>
           <div class="card-body">
+            <div id="edit-warning" style="display:none;background:var(--amber-light);color:var(--amber);border:1px solid #FDE68A;border-radius:var(--radius);padding:10px 14px;font-size:12.5px;margin-bottom:1rem"></div>
             <div class="form-grid">
               <div class="form-field">
                 <label for="f-tipo">Tipo de operación</label>
@@ -744,7 +745,7 @@
               </div>
               <div class="form-field">
                 <label for="f-monto">Monto (ARS $)</label>
-                <input id="f-monto" type="number" placeholder="0.00" min="0" />
+                <input id="f-monto" type="text" inputmode="decimal" placeholder="0" oninput="formatearInputMonto(this)" />
               </div>
               <div class="form-field">
                 <label for="f-emision">Fecha de emisión</label>
@@ -764,8 +765,8 @@
               </div>
             </div>
             <div style="display:flex;gap:10px;margin-top:1.5rem">
-              <button class="btn btn-primary" onclick="agregarCheque()"><i class="ti ti-device-floppy"></i> Guardar eCheq</button>
-              <button class="btn btn-outline" onclick="showSection('recibidos')">Cancelar</button>
+              <button class="btn btn-primary" id="btn-guardar-cheque" onclick="agregarCheque()"><i class="ti ti-device-floppy"></i> Guardar eCheq</button>
+              <button class="btn btn-outline" onclick="editandoId=null; showSection('recibidos')">Cancelar</button>
             </div>
           </div>
         </div>
@@ -876,7 +877,7 @@
       </div>
       <div class="form-field">
         <label for="ac-importe">Importe bruto acreditado (ARS)</label>
-        <input id="ac-importe" type="number" oninput="calcImpuestosModal()" />
+        <input id="ac-importe" type="text" inputmode="decimal" oninput="formatearInputMonto(this); calcImpuestosModal();" />
       </div>
     </div>
     <div id="ac-impuestos-box"></div>
@@ -924,6 +925,38 @@ function fmtARS(n) {
 }
 function todayISO() { return HOY.toISOString().split('T')[0]; }
 
+// ── MONTO: formato argentino (punto de miles, coma decimal) ──
+// Un <input type="number"> normal usa SIEMPRE punto como separador
+// decimal y no entiende el punto de miles. Si alguien escribía
+// "4.600.000" pesos, el navegador lo recortaba a "4.600000" → quedaba
+// guardado como 4,6. Por eso el campo de monto es texto, con esta
+// máscara propia.
+function formatearInputMonto(el) {
+  const cursorAlFinal = el.selectionStart === el.value.length;
+  let raw = el.value.replace(/[^\d,]/g, '');
+  const partes = raw.split(',');
+  let entero = partes[0].replace(/^0+(?=\d)/, '');
+  let decimal = partes.length > 1 ? partes.slice(1).join('').slice(0, 2) : undefined;
+  if (entero === '') entero = '';
+  entero = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  el.value = decimal !== undefined ? `${entero},${decimal}` : entero;
+  if (cursorAlFinal) el.setSelectionRange(el.value.length, el.value.length);
+}
+
+function parsearMonto(texto) {
+  if (!texto) return 0;
+  const limpio = String(texto).replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(limpio);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatearMonto(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  const partes = Number(n).toFixed(2).split('.');
+  let entero = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return partes[1] === '00' ? entero : `${entero},${partes[1]}`;
+}
+
 // Tasas impuestos
 const TASA_CHEQUE = 0.006;  // 0.6% impuesto al cheque
 const TASA_IIBB   = 0.015;  // 1.5% IIBB estimado (Santa Fe)
@@ -939,6 +972,7 @@ function calcImp(monto) {
 
 let nextId = 1;
 let selectedId = null;
+let editandoId = null; // si no es null, el formulario "Nuevo eCheq" está editando este cheque en vez de crear uno
 
 let cheques = [
 ];
@@ -1174,18 +1208,22 @@ function renderRecibidos() {
     let acc = '';
     if (c.acreditado) {
       acc = `<button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
              <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     } else if (c.estado === 'presentado') {
       acc = `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})">Acreditar</button>
              <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
              <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     } else if (c.estado === 'depositado') {
       acc = `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})">Acreditar</button>
              <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
              <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     } else {
       acc = `<button class="btn btn-deposit btn-sm" onclick="abrirDepositar(${c.id})"><i class="ti ti-building-bank"></i> Depositar</button>
              <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+             <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
              <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     }
     return `<tr>
@@ -1216,7 +1254,7 @@ function renderEmitidos() {
       <td style="font-size:12px">${fmt(c.emision)}</td>
       <td style="font-size:12px">${fmt(c.cobro)}</td>
       <td><span class="badge ${ei.cls}">${ei.txt}</span></td>
-      <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
+      <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
     </tr>`;
   }).join('');
 }
@@ -1228,9 +1266,11 @@ function renderPresentados() {
   tb.innerHTML = rows.map(c => {
     const acc = c.acreditado
       ? `<button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+         <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
          <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`
       : `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${c.id})"><i class="ti ti-receipt"></i> Acreditar</button>
          <button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button>
+         <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
          <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>`;
     const ei = getEstado(c);
     return `<tr>
@@ -1281,7 +1321,7 @@ function renderCobrados() {
       <td style="font-weight:700;color:var(--green)">${fmtARS(c.acreditadoImporte)}</td>
       <td style="font-size:12px">${fmt(c.cobro)}</td>
       <td style="font-size:12px">${fmt(c.acreditadoFecha)}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button></td>
+      <td><button class="btn btn-outline btn-sm" onclick="verDetalle(${c.id})"><i class="ti ti-eye"></i></button> <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button></td>
     </tr>`).join('') + `
     <tr class="ganancia-total">
       <td colspan="3" style="color:var(--green)">TOTAL</td>
@@ -1305,7 +1345,7 @@ function renderEndosados() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Endosado</span></td>
-    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
+    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
   </tr>`).join('');
 }
 
@@ -1320,7 +1360,7 @@ function renderCustodia() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-custodia">En custodia</span></td>
-    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
+    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
   </tr>`).join('');
 }
 
@@ -1335,7 +1375,7 @@ function renderCedidos() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Cedido</span></td>
-    <td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></td>
+    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
   </tr>`).join('');
 }
 
@@ -1429,12 +1469,12 @@ function abrirAcreditar(id) {
   selectedId = id;
   const c = cheques.find(x => x.id === id);
   document.getElementById('ac-fecha').value = todayISO();
-  document.getElementById('ac-importe').value = c ? c.monto : '';
+  document.getElementById('ac-importe').value = c ? formatearMonto(c.monto) : '';
   calcImpuestosModal();
   openModal('modal-acreditar');
 }
 function calcImpuestosModal() {
-  const monto = parseFloat(document.getElementById('ac-importe').value) || 0;
+  const monto = parsearMonto(document.getElementById('ac-importe').value);
   const { imp, iibb, liq, neto } = calcImp(monto);
   document.getElementById('ac-impuestos-box').innerHTML = monto > 0 ? `
     <div style="background:var(--surface2);border-radius:var(--radius);padding:1rem;margin-top:.5rem">
@@ -1456,7 +1496,7 @@ function calcImpuestosModal() {
 function confirmarAcreditar() {
   const c = cheques.find(x => x.id === selectedId);
   if (c) {
-    const monto = parseFloat(document.getElementById('ac-importe').value) || c.monto;
+    const monto = parsearMonto(document.getElementById('ac-importe').value) || c.monto;
     const imp = calcImp(monto);
     c.acreditado = true;
     c.acreditadoImporte = imp.neto;
@@ -1512,14 +1552,51 @@ function verDetalle(id) {
   openModal('modal-detalle');
 }
 
-// ── NUEVO ECHEQ ──
+// ── NUEVO ECHEQ / EDITAR ECHEQ ──
+function abrirFormularioNuevo() {
+  editandoId = null;
+  ['f-nro','f-librador','f-beneficiario','f-monto','f-emision','f-cobro','f-cuit','f-obs']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-tipo').value = 'recibido';
+  document.getElementById('form-titulo').textContent = 'Registrar nuevo eCheq';
+  document.getElementById('btn-guardar-cheque').innerHTML = '<i class="ti ti-device-floppy"></i> Guardar eCheq';
+  document.getElementById('edit-warning').style.display = 'none';
+  showSection('nuevo');
+}
+
+function editarCheque(id) {
+  const c = cheques.find(x => x.id === id);
+  if (!c) return;
+  editandoId = id;
+  document.getElementById('f-tipo').value = c.tipo === 'recibido' && c.acreditado ? 'cobrado' : c.tipo;
+  document.getElementById('f-nro').value = c.nro;
+  document.getElementById('f-librador').value = c.librador;
+  document.getElementById('f-beneficiario').value = c.beneficiario || '';
+  document.getElementById('f-banco').value = c.banco;
+  document.getElementById('f-monto').value = formatearMonto(c.monto);
+  document.getElementById('f-emision').value = c.emision;
+  document.getElementById('f-cobro').value = c.cobro;
+  document.getElementById('f-cuit').value = c.cuit || '';
+  document.getElementById('f-obs').value = c.obs || '';
+  document.getElementById('form-titulo').textContent = `Editar eCheq #${c.nro}`;
+  document.getElementById('btn-guardar-cheque').innerHTML = '<i class="ti ti-device-floppy"></i> Guardar cambios';
+  const aviso = document.getElementById('edit-warning');
+  if (c.acreditado) {
+    aviso.style.display = '';
+    aviso.textContent = '⚠ Este cheque ya fue acreditado. Si cambiás el monto acá, los impuestos ya calculados NO se recalculan solos — volvé a hacer "Acreditar" después de guardar si necesitás corregir el neto.';
+  } else {
+    aviso.style.display = 'none';
+  }
+  showSection('nuevo');
+}
+
 function agregarCheque() {
   const tipo        = document.getElementById('f-tipo').value;
   const nro         = document.getElementById('f-nro').value.trim();
   const librador    = document.getElementById('f-librador').value.trim();
   const beneficiario = document.getElementById('f-beneficiario').value.trim();
   const banco       = document.getElementById('f-banco').value;
-  const monto       = parseFloat(document.getElementById('f-monto').value) || 0;
+  const monto       = parsearMonto(document.getElementById('f-monto').value);
   const emision     = document.getElementById('f-emision').value;
   const cobro       = document.getElementById('f-cobro').value;
   const cuit        = document.getElementById('f-cuit').value.trim();
@@ -1537,6 +1614,41 @@ function agregarCheque() {
   }
 
   const esCobrado = tipo === 'cobrado';
+
+  // ── MODO EDICIÓN: actualizar un cheque existente en vez de crear uno ──
+  if (editandoId !== null) {
+    const c = cheques.find(x => x.id === editandoId);
+    if (c) {
+      let estadoNuevo = c.estado;
+      if (esCobrado) {
+        estadoNuevo = 'acreditado';
+      } else if (['presentado','endosado','custodia','cedido'].includes(tipo)) {
+        estadoNuevo = tipo;
+      } else if (!c.acreditado) {
+        estadoNuevo = 'pendiente';
+      }
+      c.tipo = esCobrado ? 'recibido' : tipo;
+      c.nro = nro; c.librador = librador; c.beneficiario = beneficiario; c.banco = banco;
+      c.monto = monto; c.emision = emision || todayISO(); c.cobro = cobro; c.cuit = cuit; c.obs = obs;
+      c.estado = estadoNuevo;
+      if (esCobrado && !c.acreditado) {
+        const imp = calcImp(monto);
+        c.acreditado = true;
+        c.acreditadoImporte = imp.neto;
+        c.acreditadoFecha = cobro || todayISO();
+        c.impuestos = imp;
+      }
+    }
+    editandoId = null;
+    guardarDatos();
+    const destMapEdit = { recibido:'recibidos', emitido:'emitidos', presentado:'presentados',
+                          cobrado:'cobrados', endosado:'endosados', custodia:'custodia', cedido:'cedidos' };
+    showSection(destMapEdit[tipo] || 'recibidos');
+    toast('✓ Cambios guardados');
+    return;
+  }
+
+  // ── MODO CREACIÓN: cheque nuevo ──
   const imp = esCobrado ? calcImp(monto) : null;
 
   // El estado inicial debe reflejar el tipo elegido: si se registra
