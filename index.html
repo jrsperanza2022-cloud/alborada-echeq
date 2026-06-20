@@ -694,7 +694,7 @@
           <div class="card-body">
             <div class="form-grid">
               <div class="form-field">
-                <label>Tipo de operación</label>
+                <label for="f-tipo">Tipo de operación</label>
                 <select id="f-tipo">
                   <option value="recibido">Recibido</option>
                   <option value="emitido">Emitido</option>
@@ -706,11 +706,11 @@
                 </select>
               </div>
               <div class="form-field">
-                <label>Número de cheque</label>
+                <label for="f-nro">Número de cheque</label>
                 <input id="f-nro" placeholder="Ej: 00012345" />
               </div>
               <div class="form-field">
-                <label>Librador / Emisor</label>
+                <label for="f-librador">Librador / Emisor</label>
                 <div class="ac-wrap">
                   <input id="f-librador" placeholder="Escribí o buscá un cliente..." autocomplete="off"
                     oninput="acFiltrar()" onfocus="acFiltrar()" onblur="setTimeout(acCerrar,180)" />
@@ -721,11 +721,11 @@
                 </button>
               </div>
               <div class="form-field">
-                <label>Beneficiario / A quién se cedió</label>
+                <label for="f-beneficiario">Beneficiario / A quién se cedió</label>
                 <input id="f-beneficiario" placeholder="Destinatario (si aplica)" />
               </div>
               <div class="form-field">
-                <label>Banco</label>
+                <label for="f-banco">Banco</label>
                 <select id="f-banco">
                   <option>Banco Nación Argentina</option>
                   <option>Banco Provincia de Buenos Aires</option>
@@ -743,23 +743,23 @@
                 </select>
               </div>
               <div class="form-field">
-                <label>Monto (ARS $)</label>
+                <label for="f-monto">Monto (ARS $)</label>
                 <input id="f-monto" type="number" placeholder="0.00" min="0" />
               </div>
               <div class="form-field">
-                <label>Fecha de emisión</label>
+                <label for="f-emision">Fecha de emisión</label>
                 <input id="f-emision" type="date" />
               </div>
               <div class="form-field">
-                <label>Fecha de cobro / pago</label>
+                <label for="f-cobro">Fecha de cobro / pago</label>
                 <input id="f-cobro" type="date" />
               </div>
               <div class="form-field">
-                <label>CUIT del librador</label>
+                <label for="f-cuit">CUIT del librador</label>
                 <input id="f-cuit" placeholder="20-12345678-9" />
               </div>
               <div class="form-field full">
-                <label>Observaciones</label>
+                <label for="f-obs">Observaciones</label>
                 <input id="f-obs" placeholder="Notas internas, número de factura, etc." />
               </div>
             </div>
@@ -797,15 +797,15 @@
     <div class="modal-title" id="modal-cliente-titulo"><i class="ti ti-user-plus" style="color:var(--orange)"></i> Nuevo cliente</div>
     <div class="form-grid">
       <div class="form-field full">
-        <label>Nombre / Razón social *</label>
+        <label for="cl-nombre">Nombre / Razón social *</label>
         <input id="cl-nombre" placeholder="Ej: Construcciones del Sur S.A." />
       </div>
       <div class="form-field">
-        <label>CUIT</label>
+        <label for="cl-cuit">CUIT</label>
         <input id="cl-cuit" placeholder="20-12345678-9" />
       </div>
       <div class="form-field">
-        <label>Banco habitual</label>
+        <label for="cl-banco">Banco habitual</label>
         <select id="cl-banco">
           <option value="">— Sin especificar —</option>
           <option>Banco Nación Argentina</option>
@@ -824,7 +824,7 @@
         </select>
       </div>
       <div class="form-field full">
-        <label>Observaciones</label>
+        <label for="cl-obs">Observaciones</label>
         <input id="cl-obs" placeholder="Notas opcionales" />
       </div>
     </div>
@@ -841,11 +841,11 @@
     <div class="modal-title"><i class="ti ti-building-bank" style="color:var(--blue)"></i> Registrar depósito</div>
     <div class="form-grid">
       <div class="form-field">
-        <label>Fecha de depósito</label>
+        <label for="dep-fecha">Fecha de depósito</label>
         <input id="dep-fecha" type="date" />
       </div>
       <div class="form-field">
-        <label>Banco donde se deposita</label>
+        <label for="dep-banco">Banco donde se deposita</label>
         <select id="dep-banco">
           <option>Banco Nación Argentina</option>
           <option>Banco Provincia de Buenos Aires</option>
@@ -871,11 +871,11 @@
     <div class="modal-title"><i class="ti ti-receipt" style="color:var(--purple)"></i> Registrar acreditación</div>
     <div class="form-grid" style="margin-bottom:1rem">
       <div class="form-field">
-        <label>Fecha de acreditación</label>
+        <label for="ac-fecha">Fecha de acreditación</label>
         <input id="ac-fecha" type="date" />
       </div>
       <div class="form-field">
-        <label>Importe bruto acreditado (ARS)</label>
+        <label for="ac-importe">Importe bruto acreditado (ARS)</label>
         <input id="ac-importe" type="number" oninput="calcImpuestosModal()" />
       </div>
     </div>
