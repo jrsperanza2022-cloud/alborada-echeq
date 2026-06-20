@@ -8,7 +8,7 @@
 // Si actualizás la app más adelante, subí los archivos nuevos Y subí
 // el número de CACHE_NAME (ej: 'echeqs-v2'). Eso fuerza a los celulares
 // a bajar la versión nueva en vez de seguir usando la vieja en caché.
-const CACHE_NAME = 'echeqs-v1';
+const CACHE_NAME = 'echeqs-v2';
 
 const ASSETS_PRECACHE = [
   './',
@@ -40,6 +40,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // Algunas extensiones del navegador (traductores, gestores de
+  // contraseñas, etc.) inyectan pedidos con esquemas como
+  // 'chrome-extension://'. La Cache API solo soporta http/https,
+  // así que esos pedidos los dejamos pasar sin intervenir.
+  if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
