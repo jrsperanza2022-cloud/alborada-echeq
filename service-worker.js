@@ -14,7 +14,7 @@
 // Si actualizás la app más adelante: subí los archivos nuevos Y subí el
 // número de CACHE_NAME (ej: 'echeqs-v4'). Eso fuerza a los celulares a
 // limpiar la caché vieja.
-const CACHE_NAME = 'echeqs-v3';
+const CACHE_NAME = 'echeqs-v4';
 
 const ASSETS_PRECACHE = [
   './manifest.json',
@@ -66,7 +66,17 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copia));
           return respuesta;
         })
-        .catch(() => caches.match(event.request)) // sin internet: usar la última copia guardada
+        .catch(() => caches.match(event.request).then((cached) => {
+          // Si tampoco hay nada guardado (ej. primera visita sin internet,
+          // o el instante exacto de cambio de versión del service worker),
+          // hay que devolver SIEMPRE una Response real — nunca "nada",
+          // porque eso es lo que tiraba el error "Failed to convert value
+          // to Response".
+          return cached || new Response(
+            '<h1>Sin conexión</h1><p>No se pudo cargar eCheqs y todavía no hay una versión guardada. Conectate a internet una vez para que quede disponible offline.</p>',
+            { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }))
     );
     return;
   }
