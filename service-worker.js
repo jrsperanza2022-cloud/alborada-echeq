@@ -1,18 +1,22 @@
 // Service worker de eCheqs.
-// Estrategia: "cache-first con relleno en segundo plano".
-// - Lo que ya está en caché se sirve al instante (anda sin internet).
-// - Lo que no está, se busca en la red y se guarda en caché para la
-//   próxima vez (así los íconos de Tabler también quedan disponibles
-//   offline después del primer uso con conexión).
 //
-// Si actualizás la app más adelante, subí los archivos nuevos Y subí
-// el número de CACHE_NAME (ej: 'echeqs-v2'). Eso fuerza a los celulares
-// a bajar la versión nueva en vez de seguir usando la vieja en caché.
-const CACHE_NAME = 'echeqs-v2';
+// Estrategia (corregida):
+// - El documento HTML (la app en sí) usa "network-first": SIEMPRE intenta
+//   traer la versión más nueva de la red primero. Si no hay internet,
+//   recién ahí usa la última copia guardada. Antes era cache-first para
+//   todo, lo que significaba que el celular se quedaba pegado para
+//   siempre con la primerísima versión que cacheó, sin importar cuántas
+//   veces se desplegara algo nuevo en Vercel.
+// - Los archivos estáticos (íconos, manifest, la fuente de Tabler) sí
+//   usan cache-first con relleno en segundo plano, porque esos casi
+//   nunca cambian y no tiene sentido pedirlos de nuevo cada vez.
+//
+// Si actualizás la app más adelante: subí los archivos nuevos Y subí el
+// número de CACHE_NAME (ej: 'echeqs-v4'). Eso fuerza a los celulares a
+// limpiar la caché vieja.
+const CACHE_NAME = 'echeqs-v3';
 
 const ASSETS_PRECACHE = [
-  './',
-  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -38,6 +42,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function esNavegacionDeDocumento(request) {
+  // Pedido de la página HTML en sí (al abrir/recargar la app), no de un
+  // ícono, fuente, manifest, etc.
+  return request.mode === 'navigate' || request.destination === 'document';
+}
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -47,21 +57,34 @@ self.addEventListener('fetch', (event) => {
   // así que esos pedidos los dejamos pasar sin intervenir.
   if (!event.request.url.startsWith('http')) return;
 
+  // ── HTML de la app: network-first ──
+  if (esNavegacionDeDocumento(event.request)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((respuesta) => {
+          const copia = respuesta.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copia));
+          return respuesta;
+        })
+        .catch(() => caches.match(event.request)) // sin internet: usar la última copia guardada
+    );
+    return;
+  }
+
+  // ── Recursos estáticos: cache-first con relleno en segundo plano ──
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
 
       return fetch(event.request)
         .then((respuesta) => {
-          // Solo cacheamos respuestas válidas (incluye opacas de otros
-          // orígenes, como la fuente de íconos de Tabler).
           if (respuesta && (respuesta.status === 200 || respuesta.type === 'opaque')) {
             const copia = respuesta.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copia));
           }
           return respuesta;
         })
-        .catch(() => cached); // sin red y sin caché: no hay nada para servir
+        .catch(() => cached);
     })
   );
 });
