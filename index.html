@@ -520,6 +520,7 @@
       <div class="nav-section-label">Acciones</div>
       <div class="nav-item" onclick="abrirFormularioNuevo()" id="nav-nuevo"><i class="ti ti-circle-plus"></i> Nuevo eCheq</div>
       <div class="nav-item" onclick="showSection('clientes')" id="nav-clientes"><i class="ti ti-users"></i> Clientes</div>
+      <div class="nav-item" onclick="showSection('beneficiarios')" id="nav-beneficiarios"><i class="ti ti-user-check"></i> Beneficiarios</div>
     </nav>
   </aside>
 
@@ -723,7 +724,14 @@
               </div>
               <div class="form-field">
                 <label for="f-beneficiario">Beneficiario / A quién se cedió</label>
-                <input id="f-beneficiario" placeholder="Destinatario (si aplica)" />
+                <div class="ac-wrap">
+                  <input id="f-beneficiario" placeholder="Destinatario (si aplica)" autocomplete="off"
+                    oninput="acFiltrarBenef()" onfocus="acFiltrarBenef()" onblur="setTimeout(acCerrarBenef,180)" />
+                  <div class="ac-dropdown" id="ac-dropdown-benef"></div>
+                </div>
+                <button class="clientes-btn" type="button" onclick="showSection('beneficiarios')">
+                  <i class="ti ti-user-check"></i> Gestionar beneficiarios guardados
+                </button>
               </div>
               <div class="form-field">
                 <label for="f-banco">Banco</label>
@@ -788,6 +796,22 @@
         </div>
       </section>
 
+      <!-- ── BENEFICIARIOS ── -->
+      <section id="beneficiarios" class="section">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="ti ti-user-check" style="color:var(--orange)"></i> Beneficiarios guardados</span>
+            <button class="btn btn-primary btn-sm" onclick="abrirNuevoBeneficiario()"><i class="ti ti-plus"></i> Nuevo beneficiario</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nombre / Razón social</th><th>CUIT</th><th>Obs.</th><th></th></tr></thead>
+              <tbody id="tb-beneficiarios"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 </div>
@@ -832,6 +856,31 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-cliente')">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarCliente()"><i class="ti ti-device-floppy"></i> Guardar cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO BENEFICIARIO -->
+<div class="modal-backdrop" id="modal-beneficiario">
+  <div class="modal">
+    <div class="modal-title" id="modal-beneficiario-titulo"><i class="ti ti-user-plus" style="color:var(--orange)"></i> Nuevo beneficiario</div>
+    <div class="form-grid">
+      <div class="form-field full">
+        <label for="bf-nombre">Nombre / Razón social *</label>
+        <input id="bf-nombre" placeholder="Ej: Proveedor del Sur S.A." />
+      </div>
+      <div class="form-field">
+        <label for="bf-cuit">CUIT</label>
+        <input id="bf-cuit" placeholder="20-12345678-9" />
+      </div>
+      <div class="form-field full">
+        <label for="bf-obs">Observaciones</label>
+        <input id="bf-obs" placeholder="Notas opcionales" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-beneficiario')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarBeneficiario()"><i class="ti ti-device-floppy"></i> Guardar beneficiario</button>
     </div>
   </div>
 </div>
@@ -986,7 +1035,7 @@ let cheques = [
 // Estructura: 3 "tablas" (object stores) — cheques, clientes y meta
 // (esta última solo guarda el contador nextId).
 const DB_NAME = 'echeqsDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let db = null;
 
 function abrirDB() {
@@ -997,6 +1046,7 @@ function abrirDB() {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('cheques'))  d.createObjectStore('cheques',  { keyPath: 'id' });
       if (!d.objectStoreNames.contains('clientes')) d.createObjectStore('clientes', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('beneficiarios')) d.createObjectStore('beneficiarios', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('meta'))     d.createObjectStore('meta',     { keyPath: 'key' });
     };
     req.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -1035,13 +1085,14 @@ function idbReemplazarTabla(storeName, items) {
 }
 
 async function cargarDatosGuardados() {
-  const [cheques_, clientes_, metaRows] = await Promise.all([
+  const [cheques_, clientes_, beneficiarios_, metaRows] = await Promise.all([
     idbGetAll('cheques'),
     idbGetAll('clientes'),
+    idbGetAll('beneficiarios'),
     idbGetAll('meta'),
   ]);
   const meta = metaRows.find((m) => m.key === 'counters');
-  return { cheques: cheques_, clientes: clientes_, nextId: meta ? meta.nextId : null };
+  return { cheques: cheques_, clientes: clientes_, beneficiarios: beneficiarios_, nextId: meta ? meta.nextId : null };
 }
 
 async function guardarDatos() {
@@ -1049,6 +1100,7 @@ async function guardarDatos() {
     await Promise.all([
       idbReemplazarTabla('cheques', cheques),
       idbReemplazarTabla('clientes', clientes),
+      idbReemplazarTabla('beneficiarios', beneficiarios),
       idbPut('meta', { key: 'counters', nextId }),
     ]);
   } catch (e) {
@@ -1419,13 +1471,15 @@ function renderAll() {
   renderCedidos();
   renderFlujo();
   renderClientes();
+  renderBeneficiarios();
 }
 
 // ── NAVEGACIÓN ──
 const TITLES = { alertas:'Alertas', recibidos:'eCheqs recibidos', emitidos:'eCheqs emitidos',
   presentados:'Presentados al cobro', cobrados:'Cobrados / Ganancias',
   endosados:'eCheqs endosados', custodia:'En custodia', cedidos:'eCheqs cedidos',
-  flujo:'Flujo de caja', nuevo:'Nuevo eCheq', clientes:'Clientes / Libradores' };
+  flujo:'Flujo de caja', nuevo:'Nuevo eCheq', clientes:'Clientes / Libradores',
+  beneficiarios:'Beneficiarios' };
 
 function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -1613,6 +1667,12 @@ function agregarCheque() {
     renderClientes();
   }
 
+  // Guardar beneficiario (si se completó) como beneficiario guardado si no existe aún
+  if (beneficiario && !beneficiarios.some(b => b.nombre.toLowerCase() === beneficiario.toLowerCase())) {
+    beneficiarios.push({ id: Date.now() + 1, nombre: beneficiario, cuit: '', obs: '' });
+    renderBeneficiarios();
+  }
+
   const esCobrado = tipo === 'cobrado';
 
   // ── MODO EDICIÓN: actualizar un cheque existente en vez de crear uno ──
@@ -1685,6 +1745,8 @@ function agregarCheque() {
 // ── CLIENTES ──
 let clientes = [];
 let editClienteId = null;
+let beneficiarios = [];
+let editBeneficiarioId = null;
 
 function guardarCliente() {
   const nombre = document.getElementById('cl-nombre').value.trim();
@@ -1751,6 +1813,122 @@ function renderClientes() {
       </div>
     </td>
   </tr>`).join('');
+}
+
+// ── BENEFICIARIOS ──
+function guardarBeneficiario() {
+  const nombre = document.getElementById('bf-nombre').value.trim();
+  if (!nombre) { toast('El nombre es obligatorio', true); return; }
+  const cuit = document.getElementById('bf-cuit').value.trim();
+  const obs  = document.getElementById('bf-obs').value.trim();
+  if (editBeneficiarioId !== null) {
+    const b = beneficiarios.find(x => x.id === editBeneficiarioId);
+    if (b) { b.nombre = nombre; b.cuit = cuit; b.obs = obs; }
+    editBeneficiarioId = null;
+  } else {
+    beneficiarios.push({ id: Date.now(), nombre, cuit, obs });
+  }
+  closeModal('modal-beneficiario');
+  renderBeneficiarios();
+  guardarDatos();
+  toast('Beneficiario guardado');
+}
+
+function abrirNuevoBeneficiario() {
+  editBeneficiarioId = null;
+  document.getElementById('modal-beneficiario-titulo').innerHTML = '<i class="ti ti-user-plus" style="color:var(--orange)"></i> Nuevo beneficiario';
+  ['bf-nombre','bf-cuit','bf-obs'].forEach(id => document.getElementById(id).value = '');
+  openModal('modal-beneficiario');
+}
+
+function editarBeneficiario(id) {
+  const b = beneficiarios.find(x => x.id === id); if (!b) return;
+  editBeneficiarioId = id;
+  document.getElementById('modal-beneficiario-titulo').innerHTML = '<i class="ti ti-edit" style="color:var(--orange)"></i> Editar beneficiario';
+  document.getElementById('bf-nombre').value = b.nombre;
+  document.getElementById('bf-cuit').value   = b.cuit;
+  document.getElementById('bf-obs').value    = b.obs;
+  openModal('modal-beneficiario');
+}
+
+function eliminarBeneficiario(id) {
+  const b = beneficiarios.find(x => x.id === id); if (!b) return;
+  if (!confirm(`¿Eliminar el beneficiario "${b.nombre}"?`)) return;
+  beneficiarios = beneficiarios.filter(x => x.id !== id);
+  renderBeneficiarios();
+  guardarDatos();
+  toast('Beneficiario eliminado');
+}
+
+function renderBeneficiarios() {
+  const tb = document.getElementById('tb-beneficiarios');
+  if (!tb) return;
+  if (!beneficiarios.length) {
+    tb.innerHTML = `<tr><td colspan="4"><div class="empty-state"><i class="ti ti-user-check"></i>Sin beneficiarios guardados.<br>Agregá uno con el botón de arriba.</div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = beneficiarios.map(b => `<tr>
+    <td style="font-weight:600">${b.nombre}</td>
+    <td><code>${b.cuit || '—'}</code></td>
+    <td style="font-size:12px;color:var(--text-2)">${b.obs || '—'}</td>
+    <td>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-outline btn-sm" onclick="editarBeneficiario(${b.id})"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarBeneficiario(${b.id})"><i class="ti ti-trash"></i></button>
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+// ── AUTOCOMPLETE BENEFICIARIO (mismo patrón que el de Librador) ──
+function acFiltrarBenef() {
+  const q = document.getElementById('f-beneficiario').value.toLowerCase();
+  const dd = document.getElementById('ac-dropdown-benef');
+  const matches = q.length === 0
+    ? beneficiarios
+    : beneficiarios.filter(b => b.nombre.toLowerCase().includes(q) || (b.cuit && b.cuit.includes(q)));
+
+  if (!beneficiarios.length && q.length === 0) { dd.classList.remove('open'); return; }
+
+  let html = matches.map(b => `
+    <div class="ac-item" onmousedown="acSeleccionarBenef(${b.id})">
+      <div>
+        <div class="ac-item-name">${b.nombre}</div>
+        ${b.cuit ? `<div class="ac-item-cuit">CUIT: ${b.cuit}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  if (q.length > 0) {
+    const existe = beneficiarios.some(b => b.nombre.toLowerCase() === q);
+    if (!existe) {
+      html += `<div class="ac-add-new" onmousedown="acGuardarNuevoBenef()">
+        <i class="ti ti-plus"></i> Guardar "${document.getElementById('f-beneficiario').value}" como nuevo beneficiario
+      </div>`;
+    }
+  }
+
+  dd.innerHTML = html || '<div style="padding:8px 12px;font-size:13px;color:var(--text-3)">Sin resultados</div>';
+  dd.classList.add('open');
+}
+
+function acSeleccionarBenef(id) {
+  const b = beneficiarios.find(x => x.id === id); if (!b) return;
+  document.getElementById('f-beneficiario').value = b.nombre;
+  document.getElementById('ac-dropdown-benef').classList.remove('open');
+}
+
+function acGuardarNuevoBenef() {
+  const nombre = document.getElementById('f-beneficiario').value.trim();
+  if (!nombre) return;
+  beneficiarios.push({ id: Date.now(), nombre, cuit: '', obs: '' });
+  document.getElementById('ac-dropdown-benef').classList.remove('open');
+  guardarDatos();
+  toast(`Beneficiario "${nombre}" guardado`);
+  renderBeneficiarios();
+}
+
+function acCerrarBenef() {
+  document.getElementById('ac-dropdown-benef').classList.remove('open');
 }
 
 // ── AUTOCOMPLETE ──
@@ -1836,6 +2014,7 @@ function toast(msg, error = false) {
     const datos = await cargarDatosGuardados();
     cheques  = datos.cheques  || [];
     clientes = datos.clientes || [];
+    beneficiarios = datos.beneficiarios || [];
     nextId   = datos.nextId   || null;
 
     // Si la base de datos está vacía, puede ser la primera vez que se
@@ -1846,6 +2025,7 @@ function toast(msg, error = false) {
       if (viejos) {
         cheques  = viejos.cheques  || [];
         clientes = viejos.clientes || [];
+        beneficiarios = viejos.beneficiarios || [];
         nextId   = viejos.nextId   || null;
         await guardarDatos();
         localStorage.removeItem('echeqs:data');
