@@ -14,7 +14,7 @@
 // Si actualizás la app más adelante: subí los archivos nuevos Y subí el
 // número de CACHE_NAME (ej: 'echeqs-v4'). Eso fuerza a los celulares a
 // limpiar la caché vieja.
-const CACHE_NAME = 'echeqs-v4';
+const CACHE_NAME = 'echeqs-v5';
 
 const ASSETS_PRECACHE = [
   './manifest.json',
