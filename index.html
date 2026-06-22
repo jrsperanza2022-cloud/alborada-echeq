@@ -1152,51 +1152,75 @@ function diasBadge(c) {
 function getAlertas() {
   const res = [];
   cheques.forEach(c => {
-    if (!['recibido','endosado','presentado'].includes(c.tipo)) return;
     if (c.acreditado) return;
+    const d = daysFrom(c.cobro);
 
-    // Si ya está depositado o presentado al cobro, no tiene sentido seguir
-    // mostrando el aviso de "depositalo antes de que venza": esa etapa ya
-    // se cumplió. Antes se mostraban las dos alertas (depositar + acreditar)
-    // al mismo tiempo para el mismo cheque.
-    const enTransito = c.estado === 'depositado' || c.estado === 'presentado';
+    // ── RECIBIDOS / ENDOSADOS / PRESENTADOS: plata que vas a cobrar (VERDE) ──
+    if (['recibido','endosado','presentado'].includes(c.tipo)) {
+      // Si ya está depositado o presentado al cobro, no tiene sentido seguir
+      // mostrando el aviso de "depositalo antes de que venza": esa etapa ya
+      // se cumplió. Antes se mostraban las dos alertas (depositar + acreditar)
+      // al mismo tiempo para el mismo cheque.
+      const enTransito = c.estado === 'depositado' || c.estado === 'presentado';
 
-    if (!enTransito) {
-      const d = daysFrom(c.cobro);
-      if (d < 0) {
-        res.push({ tipo:'danger', icon:'ti-alert-triangle', id:c.id,
-          titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
-          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-          action:'depositar' });
-      } else if (d === 0) {
-        res.push({ tipo:'danger', icon:'ti-alarm', id:c.id,
-          titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
+      if (!enTransito) {
+        if (d < 0) {
+          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+            titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
+            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+            action:'depositar' });
+        } else if (d === 0) {
+          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+            titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
+            sub:`${c.librador} · ${fmtARS(c.monto)}`,
+            action:'depositar' });
+        } else if (d <= 7) {
+          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+            titulo:`eCheq #${c.nro} vence en ${d} días`,
+            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+            action:'depositar' });
+        } else if (d <= 30) {
+          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+            titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
+            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+            action:null });
+        }
+      }
+
+      if (c.estado === 'depositado') {
+        res.push({ tipo:'success', icon:'ti-building-bank', id:c.id,
+          titulo:`eCheq #${c.nro} depositado — pendiente de acreditación`,
           sub:`${c.librador} · ${fmtARS(c.monto)}`,
-          action:'depositar' });
-      } else if (d <= 7) {
-        res.push({ tipo:'warning', icon:'ti-bell-ringing', id:c.id,
-          titulo:`eCheq #${c.nro} vence en ${d} días`,
-          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-          action:'depositar' });
-      } else if (d <= 30) {
-        res.push({ tipo:'warning', icon:'ti-clock', id:c.id,
-          titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
-          sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-          action:null });
+          action:'acreditar' });
+      }
+      if (c.estado === 'presentado') {
+        res.push({ tipo:'success', icon:'ti-clock-check', id:c.id,
+          titulo:`eCheq #${c.nro} presentado al cobro — aguardando acreditación`,
+          sub:`${c.librador} · ${fmtARS(c.monto)} · F. cobro: ${fmt(c.cobro)}`,
+          action:'acreditar' });
       }
     }
 
-    if (c.estado === 'depositado' && !c.acreditado) {
-      res.push({ tipo:'info', icon:'ti-building-bank', id:c.id,
-        titulo:`eCheq #${c.nro} depositado — pendiente de acreditación`,
-        sub:`${c.librador} · ${fmtARS(c.monto)}`,
-        action:'acreditar' });
+    // ── EMITIDOS: plata que vos tenés que pagar — asegurate los fondos (ROJO) ──
+    if (c.tipo === 'emitido' && d <= 30) {
+      let titulo;
+      if (d < 0)       titulo = `eCheq #${c.nro} emitido — venció hace ${Math.abs(d)} días`;
+      else if (d === 0) titulo = `eCheq #${c.nro} emitido — vence HOY, asegurate los fondos`;
+      else              titulo = `eCheq #${c.nro} emitido — vence en ${d} días, asegurate los fondos`;
+      res.push({ tipo:'danger', icon:'ti-arrow-up-circle', id:c.id, titulo,
+        sub:`${c.beneficiario || 'Sin beneficiario'} · ${fmtARS(c.monto)} · Pago: ${fmt(c.cobro)}`,
+        action:null });
     }
-    if (c.estado === 'presentado' && !c.acreditado) {
-      res.push({ tipo:'info', icon:'ti-clock-check', id:c.id,
-        titulo:`eCheq #${c.nro} presentado al cobro — aguardando acreditación`,
+
+    // ── EN CUSTODIA: recordatorio de que sigue ahí guardado (AMARILLO) ──
+    if (c.tipo === 'custodia' && d <= 30) {
+      let titulo;
+      if (d < 0)       titulo = `eCheq #${c.nro} en custodia — venció hace ${Math.abs(d)} días`;
+      else if (d === 0) titulo = `eCheq #${c.nro} en custodia — vence HOY`;
+      else              titulo = `eCheq #${c.nro} en custodia — vence en ${d} días`;
+      res.push({ tipo:'warning', icon:'ti-safe', id:c.id, titulo,
         sub:`${c.librador} · ${fmtARS(c.monto)} · F. cobro: ${fmt(c.cobro)}`,
-        action:'acreditar' });
+        action:null });
     }
   });
   return res;
