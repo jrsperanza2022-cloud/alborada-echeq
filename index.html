@@ -319,7 +319,7 @@
     .alert-body    { flex: 1; }
     .alert-title   { font-size: 13.5px; font-weight: 600; color: var(--text); }
     .alert-sub     { font-size: 12px; color: var(--text-2); margin-top: 2px; }
-    .alert-actions { margin-top: 8px; display: flex; gap: 6px; }
+    .alert-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .form-field { display: flex; flex-direction: column; gap: 5px; }
@@ -630,7 +630,7 @@
         <div class="card">
           <div class="card-header">
             <span class="card-title"><i class="ti ti-coin" style="color:var(--green)"></i> Cheques cobrados</span>
-            <span style="font-size:12px;color:var(--text-3)">Solo cheques acreditados en cuenta</span>
+            <span style="font-size:12px;color:var(--text-3)">Solo cheques acreditados en tu cuenta</span>
           </div>
           <div class="table-wrap">
             <table>
@@ -673,7 +673,7 @@
                   <option value="emitido">Emitido</option>
                   <option value="presentado">Presentado al cobro</option>
                   <option value="cobrado">Cobrado / Pagado</option>
-                  <option value="endosado">Endosado</option>
+                  <option value="endosado">Endosado (lo di a un tercero)</option>
                   <option value="custodia">En custodia</option>
                   <option value="cedido">Cedido</option>
                 </select>
@@ -694,7 +694,7 @@
                 </button>
               </div>
               <div class="form-field">
-                <label for="f-beneficiario">Beneficiario / A quién se cedió</label>
+                <label for="f-beneficiario">Beneficiario / A quién se cedió / endosó</label>
                 <div class="ac-wrap">
                   <input id="f-beneficiario" placeholder="Destinatario (si aplica)" autocomplete="off"
                     oninput="acFiltrarBenef()" onfocus="acFiltrarBenef()" onblur="setTimeout(acCerrarBenef,180)" />
@@ -918,14 +918,22 @@
 </div>
 
 <script>
-// ── FECHA DINÁMICA (FIX: antes HOY era una constante que se congelaba
-// al cargar la página y nunca se actualizaba si la app quedaba abierta
-// de un día para el otro) ──
+// ══════════════════════════════════════════════════
+// FIX 1: FECHAS — getHoy() siempre calcula en el
+// momento en que se llama, nunca se congela.
+// Además: re-render cuando la pestaña vuelve a ser
+// visible (fix para móvil que deja la app abierta).
+// ══════════════════════════════════════════════════
 function getHoy() {
   const h = new Date();
   h.setHours(0, 0, 0, 0);
   return h;
 }
+
+// Re-render automático cuando el usuario vuelve a la app
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) renderAll();
+});
 
 function parseLocalDate(d) {
   const [y, m, day] = d.split('-').map(Number);
@@ -1000,10 +1008,10 @@ function abrirDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
-      if (!d.objectStoreNames.contains('cheques'))  d.createObjectStore('cheques',  { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('clientes')) d.createObjectStore('clientes', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('beneficiarios')) d.createObjectStore('beneficiarios', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('meta'))     d.createObjectStore('meta',     { keyPath: 'key' });
+      if (!d.objectStoreNames.contains('cheques'))      d.createObjectStore('cheques',      { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('clientes'))     d.createObjectStore('clientes',     { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('beneficiarios'))d.createObjectStore('beneficiarios',{ keyPath: 'id' });
+      if (!d.objectStoreNames.contains('meta'))         d.createObjectStore('meta',         { keyPath: 'key' });
     };
     req.onsuccess = (e) => { db = e.target.result; resolve(db); };
     req.onerror   = (e) => reject(e.target.error);
@@ -1058,7 +1066,7 @@ async function guardarDatos() {
       idbPut('meta', { key: 'counters', nextId }),
     ]);
   } catch (e) {
-    toast('⚠ No se pudo guardar en la base de datos del celular', true);
+    toast('⚠ No se pudo guardar en la base de datos', true);
   }
 }
 
@@ -1075,10 +1083,10 @@ async function migrarDatosViejos() {
 function getEstado(c) {
   if (c.acreditado) return { cls:'b-cobrado', txt:'✓ Cobrado' };
   if (c.estado === 'presentado')  return { cls:'b-presentado', txt:'Presentado al cobro' };
-  if (c.estado === 'depositado') return { cls:'b-depositado', txt:'Depositado' };
-  if (c.estado === 'endosado')   return { cls:'b-endosado',   txt:'Endosado' };
-  if (c.estado === 'custodia')   return { cls:'b-custodia',   txt:'En custodia' };
-  if (c.estado === 'cedido')     return { cls:'b-endosado',   txt:'Cedido' };
+  if (c.estado === 'depositado')  return { cls:'b-depositado', txt:'Depositado' };
+  if (c.estado === 'endosado')    return { cls:'b-endosado',   txt:'Endosado' };
+  if (c.estado === 'custodia')    return { cls:'b-custodia',   txt:'En custodia' };
+  if (c.estado === 'cedido')      return { cls:'b-endosado',   txt:'Cedido' };
   const d = daysFrom(c.cobro);
   if (d < 0)  return { cls:'b-vencido',  txt:'Vencido' };
   if (d === 0) return { cls:'b-cobrable', txt:'Vence hoy' };
@@ -1186,6 +1194,10 @@ function renderMetricasAlertas() {
   badge.textContent = alertas;
 }
 
+// ══════════════════════════════════════════════════
+// FIX 2: ALERTAS — agrega botón "Editar" en cada
+// alerta para poder modificar el cheque directamente
+// ══════════════════════════════════════════════════
 function renderAlertas() {
   const list = getAlertas();
   document.getElementById('alertas-count').textContent = list.length + ' alertas';
@@ -1211,6 +1223,7 @@ function renderAlertas() {
           ${a.action === 'depositar' ? `<button class="btn btn-deposit btn-sm" onclick="abrirDepositar(${a.id})"><i class="ti ti-building-bank"></i> Depositar</button>` : ''}
           ${a.action === 'acreditar' ? `<button class="btn btn-accredit btn-sm" onclick="abrirAcreditar(${a.id})"><i class="ti ti-receipt"></i> Acreditar</button>` : ''}
           <button class="btn btn-outline btn-sm" onclick="verDetalle(${a.id})"><i class="ti ti-eye"></i> Ver detalle</button>
+          <button class="btn btn-outline btn-sm" onclick="editarCheque(${a.id})"><i class="ti ti-edit"></i> Editar</button>
         </div>
       </div>
     </div>`).join('');
@@ -1271,7 +1284,10 @@ function renderEmitidos() {
       <td style="font-size:12px">${fmt(c.emision)}</td>
       <td style="font-size:12px">${fmt(c.cobro)}</td>
       <td><span class="badge ${ei.cls}">${ei.txt}</span></td>
-      <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
+      <td><div style="display:flex;gap:5px">
+        <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>
+      </div></td>
     </tr>`;
   }).join('');
 }
@@ -1302,8 +1318,14 @@ function renderPresentados() {
   }).join('');
 }
 
+// ══════════════════════════════════════════════════
+// FIX 3: COBRADOS — solo muestra cheques de tipo
+// 'recibido' acreditados. Los endosados/cedidos que
+// el tercero cobró NO aparecen como ganancia propia.
+// ══════════════════════════════════════════════════
 function renderCobrados() {
-  const rows = cheques.filter(c => c.acreditado);
+  // SOLO tipo recibido + acreditado = dinero que entró en tu cuenta
+  const rows = cheques.filter(c => c.tipo === 'recibido' && c.acreditado);
   const tb = document.getElementById('tb-cobrados');
   if (!rows.length) {
     tb.innerHTML = `<tr><td colspan="11"><div class="empty-state"><i class="ti ti-coin-off"></i>Aún no hay cheques cobrados</div></td></tr>`;
@@ -1358,7 +1380,10 @@ function renderEndosados() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Endosado</span></td>
-    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
+    <td><div style="display:flex;gap:5px">
+      <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
+      <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>
+    </div></td>
   </tr>`).join('');
 }
 
@@ -1373,7 +1398,10 @@ function renderCustodia() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-custodia">En custodia</span></td>
-    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
+    <td><div style="display:flex;gap:5px">
+      <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
+      <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>
+    </div></td>
   </tr>`).join('');
 }
 
@@ -1388,14 +1416,17 @@ function renderCedidos() {
     <td style="font-weight:600">${fmtARS(c.monto)}</td>
     <td style="font-size:12px">${fmt(c.cobro)}</td>
     <td><span class="badge b-endosado">Cedido</span></td>
-    <td><div style="display:flex;gap:5px"><button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button></div></td>
+    <td><div style="display:flex;gap:5px">
+      <button class="btn btn-outline btn-sm" onclick="editarCheque(${c.id})"><i class="ti ti-edit"></i></button>
+      <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="eliminarCheque(${c.id})"><i class="ti ti-trash"></i></button>
+    </div></td>
   </tr>`).join('');
 }
 
 function renderFlujo() {
   const hoy = getHoy();
   const año = hoy.getFullYear();
-  const mes = hoy.getMonth(); // 0-based
+  const mes = hoy.getMonth();
   const meses = [];
   const ranges = [];
   for (let i = 0; i < 4; i++) {
@@ -1525,10 +1556,15 @@ function confirmarAcreditar() {
     c.acreditadoFecha   = document.getElementById('ac-fecha').value;
     c.impuestos = imp;
     c.estado = 'acreditado';
+    // FIX 3: si era endosado, NO lo convierte en recibido — sigue siendo endosado
+    // Solo marca la acreditación para referencias, pero no aparece en cobrados propios
+    if (c.tipo !== 'recibido') {
+      // el dinero no entró en tu cuenta, no cambiar tipo
+    }
   }
   closeModal('modal-acreditar');
   guardarDatos();
-  toast('✓ Cheque cobrado y acreditado correctamente');
+  toast('✓ Cheque acreditado correctamente');
   showSection('cobrados');
 }
 
@@ -1588,7 +1624,8 @@ function editarCheque(id) {
   const c = cheques.find(x => x.id === id);
   if (!c) return;
   editandoId = id;
-  document.getElementById('f-tipo').value = c.tipo === 'recibido' && c.acreditado ? 'cobrado' : c.tipo;
+  // Si es recibido+acreditado, mostrar como "cobrado" en el form
+  document.getElementById('f-tipo').value = (c.tipo === 'recibido' && c.acreditado) ? 'cobrado' : c.tipo;
   document.getElementById('f-nro').value = c.nro;
   document.getElementById('f-librador').value = c.librador;
   document.getElementById('f-beneficiario').value = c.beneficiario || '';
@@ -1611,16 +1648,16 @@ function editarCheque(id) {
 }
 
 function agregarCheque() {
-  const tipo        = document.getElementById('f-tipo').value;
-  const nro         = document.getElementById('f-nro').value.trim();
-  const librador    = document.getElementById('f-librador').value.trim();
+  const tipo         = document.getElementById('f-tipo').value;
+  const nro          = document.getElementById('f-nro').value.trim();
+  const librador     = document.getElementById('f-librador').value.trim();
   const beneficiario = document.getElementById('f-beneficiario').value.trim();
-  const banco       = document.getElementById('f-banco').value;
-  const monto       = parsearMonto(document.getElementById('f-monto').value);
-  const emision     = document.getElementById('f-emision').value;
-  const cobro       = document.getElementById('f-cobro').value;
-  const cuit        = document.getElementById('f-cuit').value.trim();
-  const obs         = document.getElementById('f-obs').value.trim();
+  const banco        = document.getElementById('f-banco').value;
+  const monto        = parsearMonto(document.getElementById('f-monto').value);
+  const emision      = document.getElementById('f-emision').value;
+  const cobro        = document.getElementById('f-cobro').value;
+  const cuit         = document.getElementById('f-cuit').value.trim();
+  const obs          = document.getElementById('f-obs').value.trim();
 
   if (!nro || !librador || !monto || !cobro) {
     toast('Completá los campos obligatorios: número, librador, monto y fecha de cobro', true);
@@ -1628,33 +1665,37 @@ function agregarCheque() {
   }
 
   if (librador && !clientes.some(c => c.nombre.toLowerCase() === librador.toLowerCase())) {
-    clientes.push({ id: Date.now(), nombre: librador, cuit: cuit, banco: banco, obs: '' });
+    clientes.push({ id: Date.now(), nombre: librador, cuit, banco, obs: '' });
     renderClientes();
   }
-
   if (beneficiario && !beneficiarios.some(b => b.nombre.toLowerCase() === beneficiario.toLowerCase())) {
     beneficiarios.push({ id: Date.now() + 1, nombre: beneficiario, cuit: '', obs: '' });
     renderBeneficiarios();
   }
 
+  // FIX 3: "cobrado" en el form solo aplica a cheques recibidos propios
   const esCobrado = tipo === 'cobrado';
 
   if (editandoId !== null) {
     const c = cheques.find(x => x.id === editandoId);
     if (c) {
+      // conservar el tipo original si era endosado/cedido — no convertir a recibido
+      const tipoFinal = esCobrado
+        ? (c.tipo === 'recibido' ? 'recibido' : c.tipo)  // preservar tipo si no era recibido
+        : tipo;
       let estadoNuevo = c.estado;
-      if (esCobrado) {
+      if (esCobrado && c.tipo === 'recibido') {
         estadoNuevo = 'acreditado';
       } else if (['presentado','endosado','custodia','cedido'].includes(tipo)) {
         estadoNuevo = tipo;
       } else if (!c.acreditado) {
         estadoNuevo = 'pendiente';
       }
-      c.tipo = esCobrado ? 'recibido' : tipo;
+      c.tipo = tipoFinal;
       c.nro = nro; c.librador = librador; c.beneficiario = beneficiario; c.banco = banco;
       c.monto = monto; c.emision = emision || todayISO(); c.cobro = cobro; c.cuit = cuit; c.obs = obs;
       c.estado = estadoNuevo;
-      if (esCobrado && !c.acreditado) {
+      if (esCobrado && c.tipo === 'recibido' && !c.acreditado) {
         const imp = calcImp(monto);
         c.acreditado = true;
         c.acreditadoImporte = imp.neto;
@@ -1679,8 +1720,11 @@ function agregarCheque() {
     estadoInicial = tipo;
   }
 
+  // FIX 3: endosado/cedido guarda su tipo real — nunca como 'recibido'
+  const tipoReal = esCobrado ? 'recibido' : tipo;
+
   cheques.push({
-    id: nextId++, tipo: esCobrado ? 'recibido' : tipo,
+    id: nextId++, tipo: tipoReal,
     nro, librador, beneficiario, banco, monto,
     emision: emision || todayISO(), cobro, cuit, obs,
     estado: estadoInicial,
@@ -1866,20 +1910,14 @@ function acSeleccionarBenef(id) {
   document.getElementById('f-beneficiario').value = b.nombre;
   document.getElementById('ac-dropdown-benef').classList.remove('open');
 }
-
 function acGuardarNuevoBenef() {
   const nombre = document.getElementById('f-beneficiario').value.trim();
   if (!nombre) return;
   beneficiarios.push({ id: Date.now(), nombre, cuit: '', obs: '' });
   document.getElementById('ac-dropdown-benef').classList.remove('open');
-  guardarDatos();
-  toast(`Beneficiario "${nombre}" guardado`);
-  renderBeneficiarios();
+  guardarDatos(); toast(`Beneficiario "${nombre}" guardado`); renderBeneficiarios();
 }
-
-function acCerrarBenef() {
-  document.getElementById('ac-dropdown-benef').classList.remove('open');
-}
+function acCerrarBenef() { document.getElementById('ac-dropdown-benef').classList.remove('open'); }
 
 function acFiltrar() {
   const q = document.getElementById('f-librador').value.toLowerCase();
@@ -1906,40 +1944,27 @@ function acFiltrar() {
   dd.innerHTML = html || '<div style="padding:8px 12px;font-size:13px;color:var(--text-3)">Sin resultados</div>';
   dd.classList.add('open');
 }
-
 function acSeleccionar(id) {
   const c = clientes.find(x => x.id === id); if (!c) return;
   document.getElementById('f-librador').value = c.nombre;
   if (c.cuit)  document.getElementById('f-cuit').value  = c.cuit;
-  if (c.banco) {
-    const sel = document.getElementById('f-banco');
-    for (let o of sel.options) { if (o.value === c.banco) { sel.value = c.banco; break; } }
-  }
+  if (c.banco) { const sel = document.getElementById('f-banco'); for (let o of sel.options) { if (o.value === c.banco) { sel.value = c.banco; break; } } }
   document.getElementById('ac-dropdown').classList.remove('open');
 }
-
 function acGuardarNuevo() {
   const nombre = document.getElementById('f-librador').value.trim();
   if (!nombre) return;
   clientes.push({ id: Date.now(), nombre, cuit: document.getElementById('f-cuit').value.trim(), banco: '', obs: '' });
   document.getElementById('ac-dropdown').classList.remove('open');
-  guardarDatos();
-  toast(`Cliente "${nombre}" guardado`);
-  renderClientes();
+  guardarDatos(); toast(`Cliente "${nombre}" guardado`); renderClientes();
 }
-
-function acCerrar() {
-  document.getElementById('ac-dropdown').classList.remove('open');
-}
+function acCerrar() { document.getElementById('ac-dropdown').classList.remove('open'); }
 
 function eliminarCheque(id) {
-  const c = cheques.find(x => x.id === id);
-  if (!c) return;
+  const c = cheques.find(x => x.id === id); if (!c) return;
   if (!confirm(`¿Eliminar el eCheq #${c.nro} de ${c.librador}?\n\nEsta acción no se puede deshacer.`)) return;
   cheques = cheques.filter(x => x.id !== id);
-  guardarDatos();
-  toast('eCheq eliminado');
-  renderAll();
+  guardarDatos(); toast('eCheq eliminado'); renderAll();
 }
 
 function toast(msg, error = false) {
@@ -1954,18 +1979,18 @@ function toast(msg, error = false) {
 (async function iniciarApp() {
   try {
     const datos = await cargarDatosGuardados();
-    cheques  = datos.cheques  || [];
-    clientes = datos.clientes || [];
+    cheques       = datos.cheques       || [];
+    clientes      = datos.clientes      || [];
     beneficiarios = datos.beneficiarios || [];
-    nextId   = datos.nextId   || null;
+    nextId        = datos.nextId        || null;
 
     if (!cheques.length && !clientes.length) {
       const viejos = await migrarDatosViejos();
       if (viejos) {
-        cheques  = viejos.cheques  || [];
-        clientes = viejos.clientes || [];
+        cheques       = viejos.cheques       || [];
+        clientes      = viejos.clientes      || [];
         beneficiarios = viejos.beneficiarios || [];
-        nextId   = viejos.nextId   || null;
+        nextId        = viejos.nextId        || null;
         await guardarDatos();
         localStorage.removeItem('echeqs:data');
         toast('Se recuperaron los datos guardados anteriormente');
@@ -1978,7 +2003,7 @@ function toast(msg, error = false) {
       navigator.storage.persist().catch(() => {});
     }
   } catch (e) {
-    toast('⚠ No se pudo abrir la base de datos local del celular', true);
+    toast('⚠ No se pudo abrir la base de datos local', true);
   }
   renderAll();
 })();
