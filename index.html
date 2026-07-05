@@ -1108,34 +1108,41 @@ function diasBadge(c) {
 
 function getAlertas() {
   const res = [];
+  const alertadosIds = new Set(); // FIX: evita duplicados del mismo cheque
   cheques.forEach(c => {
     if (c.acreditado) return;
+    // FIX: endosados y cedidos ya no son responsabilidad nuestra — no generan alerta
+    if (c.tipo === 'endosado' || c.tipo === 'cedido') return;
     const d = daysFrom(c.cobro);
 
-    if (['recibido','endosado','presentado'].includes(c.tipo)) {
+    if (['recibido','presentado'].includes(c.tipo)) {
       const enTransito = c.estado === 'depositado' || c.estado === 'presentado';
 
       if (!enTransito) {
-        if (d < 0) {
-          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
-            titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
-            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-            action:'depositar' });
-        } else if (d === 0) {
-          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
-            titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
-            sub:`${c.librador} · ${fmtARS(c.monto)}`,
-            action:'depositar' });
-        } else if (d <= 7) {
-          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
-            titulo:`eCheq #${c.nro} vence en ${d} días`,
-            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-            action:'depositar' });
-        } else if (d <= 30) {
-          res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
-            titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
-            sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
-            action:null });
+        // FIX: deduplicar por id — el mismo cheque no puede aparecer dos veces en alertas
+        if (!alertadosIds.has(c.id)) {
+          alertadosIds.add(c.id);
+          if (d < 0) {
+            res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+              titulo:`eCheq #${c.nro} VENCIDO hace ${Math.abs(d)} días`,
+              sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+              action:'depositar' });
+          } else if (d === 0) {
+            res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+              titulo:`eCheq #${c.nro} — vence HOY · ¡Depositá ya!`,
+              sub:`${c.librador} · ${fmtARS(c.monto)}`,
+              action:'depositar' });
+          } else if (d <= 7) {
+            res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+              titulo:`eCheq #${c.nro} vence en ${d} días`,
+              sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+              action:'depositar' });
+          } else if (d <= 30) {
+            res.push({ tipo:'success', icon:'ti-arrow-down-circle', id:c.id,
+              titulo:`eCheq #${c.nro} próximo a cobrar (${d} días)`,
+              sub:`${c.librador} · ${fmtARS(c.monto)} · Cobro: ${fmt(c.cobro)}`,
+              action:null });
+          }
         }
       }
 
@@ -1155,7 +1162,7 @@ function getAlertas() {
 
     if (c.tipo === 'emitido' && d <= 30) {
       let titulo;
-      if (d < 0)       titulo = `eCheq #${c.nro} emitido — venció hace ${Math.abs(d)} días`;
+      if (d < 0)        titulo = `eCheq #${c.nro} emitido — venció hace ${Math.abs(d)} días`;
       else if (d === 0) titulo = `eCheq #${c.nro} emitido — vence HOY, asegurate los fondos`;
       else              titulo = `eCheq #${c.nro} emitido — vence en ${d} días, asegurate los fondos`;
       res.push({ tipo:'danger', icon:'ti-arrow-up-circle', id:c.id, titulo,
@@ -1165,7 +1172,7 @@ function getAlertas() {
 
     if (c.tipo === 'custodia' && d <= 30) {
       let titulo;
-      if (d < 0)       titulo = `eCheq #${c.nro} en custodia — venció hace ${Math.abs(d)} días`;
+      if (d < 0)        titulo = `eCheq #${c.nro} en custodia — venció hace ${Math.abs(d)} días`;
       else if (d === 0) titulo = `eCheq #${c.nro} en custodia — vence HOY`;
       else              titulo = `eCheq #${c.nro} en custodia — vence en ${d} días`;
       res.push({ tipo:'warning', icon:'ti-safe', id:c.id, titulo,
